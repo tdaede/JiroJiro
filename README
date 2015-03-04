@@ -1,0 +1,81 @@
+This package contains several programs for beginners.
+It includes as sources and binaries.
+
+Programs available here are:
+
+fileOperations
+A program demonstrating how to operate with files.
+Performs reading and writing operations.
+
+simpleThread
+Demonstrates thread operations.
+When run several times the output may be different, depending how the
+threads are executed.
+
+server
+This is server-side program which demonstrates how a server works.
+The user has to specify on which port the server will listen.
+After reading a message the server exits.
+	Example: ./server 50000
+
+client
+This program is used as a client for the server, and should use the same
+port.
+The client sends a message to the server and reports whether the server
+got the message or not.
+	Example: ./client <hostname or localhost> 50000
+
+=== How to add a new C file to the project ===
+
+This is a guide to adding a new C file using autotools, by editing the
+files in the project directory.
+
+Let's say that we have added a file named my_test.c to the project
+directory and we want to build a binary my_test from that file.
+Let's also say that my_test.c includes the <pcre.h> header and uses the
+function pcre_compile.
+
+The steps for compilation and making binaries below assume your current
+working directory is the project directory. When running from a different
+directory append -p <path_to_your_project> to the commands.
+
+1) Update the file Makefile.am to add the new binary name at the end of
+   bin_PROGRAMS like:
+
+     bin_PROGRAMS = <existing_binaries> my_test
+
+2) Tell autotools to build the my_test.c file, by adding a new line to
+   Makefile.am:
+
+     my_test_SOURCES = my_test.c
+
+3) To add a test to the configure script to check whether the header is
+   on the target system call devassistant with these parameters:
+
+     da modify c header --header pcre.h
+
+4) To add a test for the library call devassistant with these parameters:
+
+     da modify c lib -l libpcre -f pcre_compile>
+
+   The project makefile will be updated so the binary will be linked
+   with the library.
+
+5) When the project is buildable and no errors occurs then you can add
+   your binary to the RPM, by modifying the <project_name>.spec file
+   stored in your project directory.
+
+   In that file add your binary in the %install section as a new line like:
+
+     install -p -m 755 -D my_test ${RPM_BUILD_ROOT}%{_bindir}/my_test
+
+   You also need to add that file in %files section with a new line like:
+
+     %{_bindir}/my_test
+
+   Update the %changelog section to record the change.
+
+6) To build the RPM package leave your project directory and run the
+   command:
+
+     da create c c -n <your_project_name> -b

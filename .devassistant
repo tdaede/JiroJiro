@@ -1,0 +1,14 @@
+dependencies:
+- rpm:
+  - gcc
+  - glibc-devel
+  - automake
+  - autoconf
+  - valgrind
+  - gdb
+  - strace
+devassistant_version: 0.9.3
+original_kwargs:
+  name: !!python/unicode '/home/thomas/sandbox/jirojiro'
+project_type:
+- c
