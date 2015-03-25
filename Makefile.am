@@ -1,6 +1,5 @@
 AM_CFLAGS = -Wall -Werror
-bin_PROGRAMS = fileOperations simpleThread server client
-fileOperations_SOURCES = files.c 
-simpleThread_SOURCES = simple_threads.c
-server_SOURCES = server.c
-client_SOURCES = client.c
+bin_PROGRAMS = jirojiro
+jirojiro_SOURCES = jirojiro.c
+jirojiro_CFLAGS = $(GTK_CFLAGS) $(DAALA_CFLAGS) $(OGG_CFLAGS)
+jirojiro_LDFLAGS = $(GTK_LIBS) $(DAALA_LIBS) $(OGG_LIBS) -Wl,-rpath /home/thomas/daala/src/.libs/

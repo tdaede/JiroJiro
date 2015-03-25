@@ -6,6 +6,9 @@ AM_INIT_AUTOMAKE
 #this line defines what libraries should be used during building
 AC_CHECK_LIB([pthread],[pthread_create])
 AC_CHECK_LIB([pthread],[pthread_join])
+PKG_CHECK_MODULES(GTK, gtk+-3.0 >= 3.6)
+PKG_CHECK_MODULES([OGG], [ogg >= 1.3])
+PKG_CHECK_MODULES([DAALA], [daala >= 0.0])
 # DEFINE YOUR OWN LIBRARY CHECK - DO NOT DELETE THIS LINE
 AC_PROG_CC
 #This line defines where are stored Makefiles for project and sources
