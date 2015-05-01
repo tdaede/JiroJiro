@@ -338,7 +338,7 @@ main (int   argc,
       return -1;
     }
     ogg_packet packet;
-    while (!done && ogg_stream_packetpeek(&os, &packet) != 0) {
+    while (!done && ogg_stream_packetout(&os, &packet) != 0) {
       int ret = daala_decode_header_in(&di, &dc, &dsi, &packet);
       if (ret < 0) {
         if (memcmp(packet.packet, "fishead", packet.bytes)) {
@@ -352,12 +352,6 @@ main (int   argc,
         dctx = daala_decode_alloc(&di, dsi);
         if (dctx == NULL) {
           printf("Failed to allocate Daala decoder!\n");
-          return -1;
-        }
-      }
-      if (!done) {
-        if (ogg_stream_packetout(&os, &packet) != 1) {
-          printf("???\n");
           return -1;
         }
       }
