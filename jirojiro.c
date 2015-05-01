@@ -29,6 +29,10 @@
  
  /*This should be a power of 2, and at least 8.*/
 # define OD_UMV_PADDING (32)
+
+
+# define OD_LOG_MVBSIZE_MIN (2)
+# define OD_MVBSIZE_MIN (1 << OD_LOG_MVBSIZE_MIN)
  
 typedef struct od_mv_grid_pt od_mv_grid_pt;
 struct od_mv_grid_pt {
@@ -181,14 +185,14 @@ void draw_mvs(cairo_t *cr) {
       od_mv_grid_pt* mvp = &mv_grid[vy*mv_stride + vx];
       if (mvp->valid) {
         if (mvp->ref == 0) {
-          cairo_set_source_rgba(cr, 0, 0, 1, 0.5);
+          cairo_set_source_rgba(cr, 1, 1, 1, 0.5);
         } else {
           cairo_set_source_rgba(cr, 0, 1, 0, 0.5);
         }
-        cairo_move_to(cr, vx*4 -8, vy*4 - 8);
-        cairo_line_to(cr, vx*4 + (mvp->mv[0]>>3) - 8, vy*4 + (mvp->mv[1]>>3) - 8);
+        cairo_move_to(cr, vx*4, vy*4);
+        cairo_line_to(cr, vx*4 + (mvp->mv[0]>>3), vy*4 + (mvp->mv[1]>>3));
         cairo_stroke(cr);
-        cairo_arc(cr, vx*4 - 8, vy*4 - 8, 1.5, 0, 2*M_PI);
+        cairo_arc(cr, vx*4, vy*4, 1.5, 0, 2*M_PI);
         cairo_fill(cr);
       }
     }
@@ -374,8 +378,8 @@ main (int   argc,
    ~(OD_SUPERBLOCK_SIZE - 1);
   int nhmbs = frame_width >> 4;
   int nvmbs = frame_height >> 4;
-  nhmvbs = (nhmbs + 1) << 2;
-  nvmvbs = (nvmbs + 1) << 2;
+  nhmvbs = frame_width >> OD_LOG_MVBSIZE_MIN;
+  nvmvbs = frame_height >> OD_LOG_MVBSIZE_MIN;
   mv_grid = (od_mv_grid_pt*)malloc(sizeof(od_mv_grid_pt)*(nhmvbs+1)*(nvmvbs+1));
   mv_stride = nhmvbs+1;
   int ret = daala_decode_ctl(dctx, OD_DECCTL_SET_MV_BUFFER, mv_grid, sizeof(od_mv_grid_pt)*(nhmvbs+1)*(nvmvbs+1));
