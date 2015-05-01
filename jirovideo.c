@@ -251,6 +251,8 @@ main (int   argc,
     draw_mvs(cr, &j);
     cairo_surface_write_to_png (cs,
                             filename);
+    cairo_destroy(cr);
+    cairo_surface_destroy(cs);
     frame_number++;
   }
 
