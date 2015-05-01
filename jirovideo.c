@@ -36,12 +36,6 @@ FILE* input;
 
 jiro_ctx j;
 
-static void
-step_frame (GtkWidget *widget,
-             gpointer   data) {
-  
-}
-
 static cairo_surface_t* draw(od_img *img) {
   unsigned char *y_row;
   unsigned char *u_row;
@@ -111,8 +105,6 @@ static cairo_surface_t* draw(od_img *img) {
   return cs;
 }
 
-  GtkWidget *da;
-
 
 static gboolean
 draw_cb (GtkWidget *widget,
@@ -124,20 +116,7 @@ draw_cb (GtkWidget *widget,
   cairo_surface_t* cs = draw(&img);
   cairo_set_source_surface (cr, cs, 0, 0);
   cairo_paint (cr);
-  
-  /* draw blocks */
-  int nhsb = (di.pic_width + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
-  int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
-  int sbx;
-  int sby;
-  
-  for (sby = 0; sby < nvsb; sby++) {
-    for (sbx = 0; sbx < nhsb; sbx++) {
-      draw_block_recursive(cr, &j, sbx*8, sby*8, 3);
-    }
-  }
-  
-  draw_mvs(cr, &j);
+ 
   
   return FALSE;
 }
@@ -172,66 +151,15 @@ int read_packet(ogg_packet *packet) {
   return TRUE;
 }
 
-static gboolean key_press_cb (GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
-  ogg_packet packet;
-  if (read_packet(&packet)) {
-    if (daala_decode_packet_in(dctx, &img, &packet) != 0) {
-      printf("Daala decode fail!\n");
-      return -1;
-    }
-  }
-  gtk_widget_queue_draw(da);
-  while (gtk_events_pending()) {
-    gtk_main_iteration_do(FALSE);
-  }
-  return FALSE;
-}
-
-static const char* band_desc[] = {
-  "Coded",
-  "Skipped",
-  "NoRef",
-  "Zeroed"
-};
-
-static gboolean pointer_motion_cb (GtkWidget *widget, GdkEventMotion *event, gpointer user_data) {
-  char block_text[100];
-  char flags_text[1000];
-  int flags_text_i = 0;
-  int bx = event->x / 4 / scale_factor;
-  int by = event->y / 4 / scale_factor;
-  int nhsb = (di.pic_width + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
-  int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
-  if ((bx < nhsb*8) && (by < nvsb*8)) {
-    int n = OD_BLOCK_SIZE4x4(j.bsize, j.bstride, bx, by);
-    if (n <= 3) {
-      int selected_bx = (bx >> n) << n;
-      int selected_by = (by >> n) << n;
-      int i;
-      snprintf(block_text, 100, "Block: (%d, %d) Size: %d", selected_bx, selected_by, n);
-      gtk_label_set_text(GTK_LABEL(coordinates), block_text);
-      int max_band = n * 3;
-      for (i = 0; i <= max_band; i++) {
-        int band_flags = (j.flags[selected_by * j.fstride + selected_bx]>>(2*i)) & 0x03;
-        flags_text_i += sprintf(flags_text + flags_text_i, "Band %d: %s\n", i, band_desc[band_flags]);
-      }
-      gtk_label_set_text(GTK_LABEL(flags_label), flags_text);
-    }
-  }
-  return FALSE;
-}
-
 int
 main (int   argc,
       char *argv[])
 {
-  GtkWidget *window;
-  GtkWidget *headerbar;
-  GtkWidget *topbox;
-  GtkWidget *sidebar;
+  ogg_packet packet;
+  cairo_surface_t* cs;
+  cairo_t* cr;
   int done = FALSE;
-
-  gtk_init (&argc, &argv);
+  
   if (argc < 2) {
     printf("Usage: %s *.ogv\n",argv[0]);
     return -1;
@@ -299,43 +227,32 @@ main (int   argc,
     printf("Daala build doesn't support MV buffer reads!\n");
     return -1;
   }
-  /* create a new window, and set its title */
-  window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
-  gtk_window_set_title (GTK_WINDOW (window), "JiroJiro - Daala Visualization Tool");
-  gtk_window_set_icon_from_file(GTK_WINDOW(window), "hyperoats.jpg", NULL);
-  g_signal_connect (window, "destroy", G_CALLBACK (gtk_main_quit), NULL);
-  
-  topbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-  gtk_container_add(GTK_CONTAINER(window), topbox);
-
-  da = gtk_drawing_area_new ();
-  gtk_widget_set_size_request (da, di.pic_width*scale_factor, di.pic_height*scale_factor);
-  gtk_widget_add_events(da, GDK_POINTER_MOTION_MASK);
-  gtk_container_add(GTK_CONTAINER(topbox), da);
-  
-  sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-  gtk_widget_set_size_request(sidebar, 200, 200);
-  gtk_container_add(GTK_CONTAINER(topbox), sidebar);
-  gtk_widget_show(sidebar);
-  
-  coordinates = gtk_label_new("Block:");
-  gtk_container_add(GTK_CONTAINER(sidebar), coordinates);
-  
-  flags_label = gtk_label_new("Flags:");
-  gtk_container_add(GTK_CONTAINER(sidebar), flags_label);
-  gtk_widget_show(flags_label);
-  
-  gtk_widget_show (da);
-  gtk_widget_show(topbox);
-  gtk_widget_show(coordinates);
-  gtk_widget_show (window);
-    /* Signals used to handle the backing surface */
-  g_signal_connect (da, "draw",
-                    G_CALLBACK (draw_cb), NULL);
-  g_signal_connect (window, "key_press_event", G_CALLBACK (key_press_cb), NULL);
-  g_signal_connect (da, "motion-notify-event", G_CALLBACK(pointer_motion_cb), NULL);
-
-  gtk_main ();
+  int frame_number = 0;
+  while(read_packet(&packet)) {
+    if (daala_decode_packet_in(dctx, &img, &packet) != 0) {
+      printf("Daala decode fail!\n");
+      return -1;
+    }
+    cs = draw(&img);
+    cr = cairo_create (cs);
+      /* draw blocks */
+    int nhsb = (di.pic_width + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
+    int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
+    int sbx;
+    int sby;
+    
+    for (sby = 0; sby < nvsb; sby++) {
+      for (sbx = 0; sbx < nhsb; sbx++) {
+        draw_block_recursive(cr, &j, sbx*8, sby*8, 3);
+      }
+    }
+    char filename[50];
+    sprintf(filename, "out%05d.png", frame_number);
+    draw_mvs(cr, &j);
+    cairo_surface_write_to_png (cs,
+                            filename);
+    frame_number++;
+  }
 
   return 0;
 }
