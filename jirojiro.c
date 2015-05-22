@@ -152,10 +152,9 @@ int
 main (int   argc,
       char *argv[])
 {
-  GtkWidget *window;
-  GtkWidget *headerbar;
-  GtkWidget *topbox;
-  GtkWidget *sidebar;
+  GtkBuilder *builder;
+  GObject *window;
+
   int done = FALSE;
 
   gtk_init (&argc, &argv);
@@ -241,40 +240,29 @@ main (int   argc,
   }
   daala_decode_ctl(dctx, OD_DECCTL_SET_MC_IMG, &mc_img, sizeof(od_img));
   /* create a new window, and set its title */
-  window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+  builder = gtk_builder_new();
+  gtk_builder_add_from_file(builder, "jirojiro.ui", NULL);
+  
+  window = gtk_builder_get_object(builder, "window");
   gtk_window_set_title (GTK_WINDOW (window), "JiroJiro - Daala Visualization Tool");
   gtk_window_set_icon_from_file(GTK_WINDOW(window), "hyperoats.jpg", NULL);
   g_signal_connect (window, "destroy", G_CALLBACK (gtk_main_quit), NULL);
   
-  topbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-  gtk_container_add(GTK_CONTAINER(window), topbox);
-
-  da = gtk_drawing_area_new ();
+  da = GTK_WIDGET(gtk_builder_get_object(builder, "da"));
   gtk_widget_set_size_request (da, di.pic_width*scale_factor, di.pic_height*scale_factor);
   gtk_widget_add_events(da, GDK_POINTER_MOTION_MASK);
-  gtk_container_add(GTK_CONTAINER(topbox), da);
   
-  sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-  gtk_widget_set_size_request(sidebar, 200, 200);
-  gtk_container_add(GTK_CONTAINER(topbox), sidebar);
-  gtk_widget_show(sidebar);
+  coordinates = GTK_WIDGET(gtk_builder_get_object(builder, "coordinates"));
   
-  coordinates = gtk_label_new("Block:");
-  gtk_container_add(GTK_CONTAINER(sidebar), coordinates);
-  
-  flags_label = gtk_label_new("Flags:");
-  gtk_container_add(GTK_CONTAINER(sidebar), flags_label);
-  gtk_widget_show(flags_label);
-  
-  gtk_widget_show (da);
-  gtk_widget_show(topbox);
-  gtk_widget_show(coordinates);
-  gtk_widget_show (window);
+  flags_label = GTK_WIDGET(gtk_builder_get_object(builder, "flags"));
+
     /* Signals used to handle the backing surface */
   g_signal_connect (da, "draw",
                     G_CALLBACK (draw_cb), NULL);
   g_signal_connect (window, "key_press_event", G_CALLBACK (key_press_cb), NULL);
   g_signal_connect (da, "motion-notify-event", G_CALLBACK(pointer_motion_cb), NULL);
+  
+  gtk_widget_show(window);
 
   gtk_main ();
 
