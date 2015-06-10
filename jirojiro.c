@@ -35,134 +35,46 @@ double scale_factor = 1.0;
 
 FILE* input;
 
-jiro_ctx *j;
+jiro_ctx *j = NULL;
 
-jiro_ctx jlist[100];
+jiro_ctx *jlist[100];
 
   GtkWidget *da;
   
 int frame_to_display = 0;
-
 
 static gboolean
 draw_cb (GtkWidget *widget,
          cairo_t   *cr,
          gpointer   data)
 {
-  cairo_scale(cr, scale_factor, scale_factor);
-  /* draw video */
-  cairo_surface_t* cs;
-  if (frame_to_display == 0) {
-    cs = draw(&j->img);
-  } else {
-    cs = draw(&j->mc_img);
-  }
-  cairo_set_source_surface (cr, cs, 0, 0);
-  cairo_paint (cr);
-  
-  /* draw blocks */
-  int nhsb = (di.pic_width + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
-  int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
-  int sbx;
-  int sby;
-  
-  for (sby = 0; sby < nvsb; sby++) {
-    for (sbx = 0; sbx < nhsb; sbx++) {
-      draw_block_recursive(cr, j, sbx*8, sby*8, 3);
+  if (j != NULL) {
+    cairo_scale(cr, scale_factor, scale_factor);
+    /* draw video */
+    cairo_surface_t* cs;
+    if (frame_to_display == 0) {
+      cs = draw(&j->img);
+    } else {
+      cs = draw(&j->mc_img);
     }
-  }
-  
-  draw_mvs(cr, j);
-  
-  return FALSE;
-}
-
-int read_page() {
-  while (ogg_sync_pageout(&oy, &page) != 1) {
-    char *buffer = ogg_sync_buffer(&oy, 4096);
-    if (buffer == NULL) {
-      return FALSE;
-    }
-    int bytes = fread(buffer, 1, 4096, input);
-    // End of file
-    if (bytes == 0) {
-      return FALSE;
-    }
-    if (ogg_sync_wrote(&oy, bytes) != 0) {
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-
-int read_packet(ogg_packet *packet) {
-  while (ogg_stream_packetout(&os, packet) != 1) {
-    if (!read_page()) {
-      return FALSE;
-    }
-    if (ogg_stream_pagein(&os, &page) != 0) {
-      return TRUE;
-    }
-  }
-  return TRUE;
-}
-
-static gboolean key_press_cb (GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
-  ogg_packet packet;
-  if (read_packet(&packet)) {
-    if (daala_decode_packet_in(dctx, &j->img, &packet) != 0) {
-      printf("Daala decode fail!\n");
-      return -1;
-    }
-    j->valid = 1;
-  }
-  gtk_widget_queue_draw(da);
-  while (gtk_events_pending()) {
-    gtk_main_iteration_do(FALSE);
-  }
-  return FALSE;
-}
-
-static gboolean frame_toggle_cb(GtkWidget *widget, GdkEvent *event, gpointer user_data) {
-  if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(frame_final))) {
-    frame_to_display = 0;
-  } else {
-    frame_to_display = 1;
-  }
-  gtk_widget_queue_draw(da);
-}
-
-static const char* band_desc[] = {
-  "Coded",
-  "Skipped",
-  "NoRef",
-  "Zeroed"
-};
-
-static gboolean pointer_motion_cb (GtkWidget *widget, GdkEventMotion *event, gpointer user_data) {
-  char block_text[100];
-  char flags_text[1000];
-  int flags_text_i = 0;
-  int bx = event->x / 4 / scale_factor;
-  int by = event->y / 4 / scale_factor;
-  int nhsb = (di.pic_width + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
-  int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
-  if ((bx < nhsb*8) && (by < nvsb*8)) {
-    int n = OD_BLOCK_SIZE4x4(j->bsize, j->bstride, bx, by);
-    if (n <= 3) {
-      int selected_bx = (bx >> n) << n;
-      int selected_by = (by >> n) << n;
-      int i;
-      snprintf(block_text, 100, "Block: (%d, %d) Size: %d", selected_bx, selected_by, n);
-      gtk_label_set_text(GTK_LABEL(coordinates), block_text);
-      int max_band = n * 3;
-      for (i = 0; i <= max_band; i++) {
-        int band_flags = (j->flags[selected_by * j->fstride + selected_bx]>>(2*i)) & 0x03;
-        flags_text_i += sprintf(flags_text + flags_text_i, "Band %d: %s\n", i, band_desc[band_flags]);
+    cairo_set_source_surface (cr, cs, 0, 0);
+    cairo_paint (cr);
+    
+    /* draw blocks */
+    int nhsb = (di.pic_width + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
+    int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
+    int sbx;
+    int sby;
+    
+    for (sby = 0; sby < nvsb; sby++) {
+      for (sbx = 0; sbx < nhsb; sbx++) {
+        draw_block_recursive(cr, j, sbx*8, sby*8, 3);
       }
-      gtk_label_set_text(GTK_LABEL(flags_label), flags_text);
     }
+    
+    draw_mvs(cr, j);
   }
+  
   return FALSE;
 }
 
@@ -223,6 +135,120 @@ int jiro_context_setup(jiro_ctx* j, daala_dec_ctx* dctx) {
     return 0;
 }
 
+int read_page() {
+  while (ogg_sync_pageout(&oy, &page) != 1) {
+    char *buffer = ogg_sync_buffer(&oy, 4096);
+    if (buffer == NULL) {
+      return FALSE;
+    }
+    int bytes = fread(buffer, 1, 4096, input);
+    // End of file
+    if (bytes == 0) {
+      return FALSE;
+    }
+    if (ogg_sync_wrote(&oy, bytes) != 0) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+int read_packet(ogg_packet *packet) {
+  while (ogg_stream_packetout(&os, packet) != 1) {
+    if (!read_page()) {
+      return FALSE;
+    }
+    if (ogg_stream_pagein(&os, &page) != 0) {
+      return TRUE;
+    }
+  }
+  return TRUE;
+}
+
+int jump_to_frame(int framenum) {
+  ogg_packet packet;
+  j = jlist[framenum];
+  if (j == NULL) {
+    j = jiro_context_create(di);
+    jlist[framenum] = j;
+    jiro_context_setup(j, dctx);
+    if (read_packet(&packet)) {
+      if (daala_decode_packet_in(dctx, &j->img, &packet) != 0) {
+        printf("Daala decode fail!\n");
+        return -1;
+      }
+      j->valid = 1;
+    }
+  }
+  gtk_widget_queue_draw(da);
+  return TRUE;
+}
+
+int current_frame = -1;
+
+void next_frame() {
+  current_frame++;
+  jump_to_frame(current_frame);
+}
+
+void prev_frame() {
+  current_frame--;
+  jump_to_frame(current_frame);
+}
+
+static gboolean key_press_cb (GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
+  next_frame();
+  while (gtk_events_pending()) {
+    gtk_main_iteration_do(FALSE);
+  }
+  return FALSE;
+}
+
+static gboolean frame_toggle_cb(GtkWidget *widget, GdkEvent *event, gpointer user_data) {
+  if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(frame_final))) {
+    frame_to_display = 0;
+  } else {
+    frame_to_display = 1;
+  }
+  gtk_widget_queue_draw(da);
+}
+
+static const char* band_desc[] = {
+  "Coded",
+  "Skipped",
+  "NoRef",
+  "Zeroed"
+};
+
+static gboolean pointer_motion_cb (GtkWidget *widget, GdkEventMotion *event, gpointer user_data) {
+  char block_text[100];
+  char flags_text[1000];
+  int flags_text_i = 0;
+  int bx = event->x / 4 / scale_factor;
+  int by = event->y / 4 / scale_factor;
+  int nhsb = (di.pic_width + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
+  int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
+  if (j != NULL) {
+    if ((bx < nhsb*8) && (by < nvsb*8)) {
+      int n = OD_BLOCK_SIZE4x4(j->bsize, j->bstride, bx, by);
+      if (n <= 3) {
+        int selected_bx = (bx >> n) << n;
+        int selected_by = (by >> n) << n;
+        int i;
+        snprintf(block_text, 100, "Block: (%d, %d) Size: %d", selected_bx, selected_by, n);
+        gtk_label_set_text(GTK_LABEL(coordinates), block_text);
+        int max_band = n * 3;
+        for (i = 0; i <= max_band; i++) {
+          int band_flags = (j->flags[selected_by * j->fstride + selected_bx]>>(2*i)) & 0x03;
+          flags_text_i += sprintf(flags_text + flags_text_i, "Band %d: %s\n", i, band_desc[band_flags]);
+        }
+        gtk_label_set_text(GTK_LABEL(flags_label), flags_text);
+      }
+    }
+  }
+  return FALSE;
+}
+
 int
 main (int   argc,
       char *argv[])
@@ -277,9 +303,6 @@ main (int   argc,
    ~(OD_SUPERBLOCK_SIZE - 1);
   int frame_height = (di.pic_height + (OD_SUPERBLOCK_SIZE - 1)) &
    ~(OD_SUPERBLOCK_SIZE - 1);
-   
-  j = jiro_context_create(di);
-  jiro_context_setup(j, dctx);
 
 
 
