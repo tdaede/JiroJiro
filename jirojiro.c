@@ -21,6 +21,8 @@ extern const int *const OD_VERT_SETUP_DY[4][4];
 static cairo_surface_t *surface = NULL;
 GtkWidget *coordinates;
 GtkWidget *flags_label;
+GtkWidget *frame_final;
+GtkWidget *frame_mc;
 ogg_page page;
 ogg_sync_state oy;
 ogg_stream_state os;
@@ -28,16 +30,18 @@ daala_info di;
 daala_comment dc;
 daala_setup_info *dsi;
 daala_dec_ctx *dctx;
-od_img img;
-od_img mc_img;
 
 double scale_factor = 1.0;
 
 FILE* input;
 
-jiro_ctx j;
+jiro_ctx *j;
+
+jiro_ctx jlist[100];
 
   GtkWidget *da;
+  
+int frame_to_display = 0;
 
 
 static gboolean
@@ -47,8 +51,12 @@ draw_cb (GtkWidget *widget,
 {
   cairo_scale(cr, scale_factor, scale_factor);
   /* draw video */
-  /* cairo_surface_t* cs = draw(&img); */
-  cairo_surface_t* cs = draw(&mc_img);
+  cairo_surface_t* cs;
+  if (frame_to_display == 0) {
+    cs = draw(&j->img);
+  } else {
+    cs = draw(&j->mc_img);
+  }
   cairo_set_source_surface (cr, cs, 0, 0);
   cairo_paint (cr);
   
@@ -60,11 +68,11 @@ draw_cb (GtkWidget *widget,
   
   for (sby = 0; sby < nvsb; sby++) {
     for (sbx = 0; sbx < nhsb; sbx++) {
-      draw_block_recursive(cr, &j, sbx*8, sby*8, 3);
+      draw_block_recursive(cr, j, sbx*8, sby*8, 3);
     }
   }
   
-  draw_mvs(cr, &j);
+  draw_mvs(cr, j);
   
   return FALSE;
 }
@@ -102,16 +110,26 @@ int read_packet(ogg_packet *packet) {
 static gboolean key_press_cb (GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
   ogg_packet packet;
   if (read_packet(&packet)) {
-    if (daala_decode_packet_in(dctx, &img, &packet) != 0) {
+    if (daala_decode_packet_in(dctx, &j->img, &packet) != 0) {
       printf("Daala decode fail!\n");
       return -1;
     }
+    j->valid = 1;
   }
   gtk_widget_queue_draw(da);
   while (gtk_events_pending()) {
     gtk_main_iteration_do(FALSE);
   }
   return FALSE;
+}
+
+static gboolean frame_toggle_cb(GtkWidget *widget, GdkEvent *event, gpointer user_data) {
+  if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON(frame_final))) {
+    frame_to_display = 0;
+  } else {
+    frame_to_display = 1;
+  }
+  gtk_widget_queue_draw(da);
 }
 
 static const char* band_desc[] = {
@@ -130,7 +148,7 @@ static gboolean pointer_motion_cb (GtkWidget *widget, GdkEventMotion *event, gpo
   int nhsb = (di.pic_width + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
   int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
   if ((bx < nhsb*8) && (by < nvsb*8)) {
-    int n = OD_BLOCK_SIZE4x4(j.bsize, j.bstride, bx, by);
+    int n = OD_BLOCK_SIZE4x4(j->bsize, j->bstride, bx, by);
     if (n <= 3) {
       int selected_bx = (bx >> n) << n;
       int selected_by = (by >> n) << n;
@@ -139,13 +157,70 @@ static gboolean pointer_motion_cb (GtkWidget *widget, GdkEventMotion *event, gpo
       gtk_label_set_text(GTK_LABEL(coordinates), block_text);
       int max_band = n * 3;
       for (i = 0; i <= max_band; i++) {
-        int band_flags = (j.flags[selected_by * j.fstride + selected_bx]>>(2*i)) & 0x03;
+        int band_flags = (j->flags[selected_by * j->fstride + selected_bx]>>(2*i)) & 0x03;
         flags_text_i += sprintf(flags_text + flags_text_i, "Band %d: %s\n", i, band_desc[band_flags]);
       }
       gtk_label_set_text(GTK_LABEL(flags_label), flags_text);
     }
   }
   return FALSE;
+}
+
+jiro_ctx* jiro_context_create(daala_info di) {
+  jiro_ctx* j = malloc(sizeof(jiro_ctx));
+  int nhsb = (di.pic_width + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
+  int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
+  j->bsize = (unsigned char *)malloc(sizeof(*j->bsize)*nhsb*4*nvsb*4);
+  j->bstride = nhsb*4;
+  j->flags = (unsigned int *)malloc(sizeof(*j->flags)*nhsb*8*nvsb*8);
+  j->fstride = nhsb*8;
+    int frame_width = (di.pic_width + (OD_SUPERBLOCK_SIZE - 1)) &
+   ~(OD_SUPERBLOCK_SIZE - 1);
+  int frame_height = (di.pic_height + (OD_SUPERBLOCK_SIZE - 1)) &
+   ~(OD_SUPERBLOCK_SIZE - 1);
+  int nhmbs = frame_width >> 4;
+  int nvmbs = frame_height >> 4;
+  j->nhmvbs = frame_width >> OD_LOG_MVBSIZE_MIN;
+  j->nvmvbs = frame_height >> OD_LOG_MVBSIZE_MIN;
+  j->mv_grid = (od_mv_grid_pt*)malloc(sizeof(od_mv_grid_pt)*(j->nhmvbs+1)*(j->nvmvbs+1));
+  j->mv_stride = j->nhmvbs+1;
+  j->mc_img.nplanes = di.nplanes;
+  j->mc_img.width = frame_width;
+  j->mc_img.height = frame_height;
+  int pli;
+  for (pli = 0; pli < j->mc_img.nplanes; pli++) {
+    int plane_buf_width = (frame_width) >> di.plane_info[pli].xdec;
+    int plane_buf_height = (frame_height) >> di.plane_info[pli].ydec;
+    od_img_plane* iplane = j->mc_img.planes + pli;
+    iplane->data = malloc(plane_buf_width * plane_buf_height);
+    iplane->xdec = di.plane_info[pli].xdec;
+    iplane->ydec = di.plane_info[pli].ydec;
+    iplane->xstride = 1;
+    iplane->ystride = plane_buf_width;
+  }
+  return j;
+}
+
+int jiro_context_setup(jiro_ctx* j, daala_dec_ctx* dctx) {
+  int nhsb = (di.pic_width + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
+  int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
+  int frame_width = (di.pic_width + (OD_SUPERBLOCK_SIZE - 1)) &
+   ~(OD_SUPERBLOCK_SIZE - 1);
+  int frame_height = (di.pic_height + (OD_SUPERBLOCK_SIZE - 1)) &
+   ~(OD_SUPERBLOCK_SIZE - 1);
+  daala_decode_ctl(dctx, OD_DECCTL_SET_BSIZE_BUFFER, j->bsize, sizeof(*j->bsize)*nhsb*4*nvsb*4);
+  daala_decode_ctl(dctx, OD_DECCTL_SET_FLAGS_BUFFER, j->flags, sizeof(*j->flags)*nhsb*8*nvsb*8);
+  
+    int ret = daala_decode_ctl(dctx, OD_DECCTL_SET_MV_BUFFER, j->mv_grid, sizeof(od_mv_grid_pt)*(j->nhmvbs+1)*(j->nvmvbs+1));
+  if (ret) {
+    if (ret == OD_EINVAL) {
+      printf("Allocated the wrong MV buffer size.\n");
+    }
+    printf("Daala build doesn't support MV buffer reads!\n");
+    return -1;
+  }
+    daala_decode_ctl(dctx, OD_DECCTL_SET_MC_IMG, &j->mc_img, sizeof(od_img));
+    return 0;
 }
 
 int
@@ -198,50 +273,19 @@ main (int   argc,
       }
     }
   }
-  int nhsb = (di.pic_width + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
-  int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
-  j.bsize = (unsigned char *)malloc(sizeof(*j.bsize)*nhsb*4*nvsb*4);
-  j.bstride = nhsb*4;
-  j.flags = (unsigned int *)malloc(sizeof(*j.flags)*nhsb*8*nvsb*8);
-  j.fstride = nhsb*8;
-  daala_decode_ctl(dctx, OD_DECCTL_SET_BSIZE_BUFFER, j.bsize, sizeof(*j.bsize)*nhsb*4*nvsb*4);
-  daala_decode_ctl(dctx, OD_DECCTL_SET_FLAGS_BUFFER, j.flags, sizeof(*j.flags)*nhsb*8*nvsb*8);
-  int frame_width = (di.pic_width + (OD_SUPERBLOCK_SIZE - 1)) &
+    int frame_width = (di.pic_width + (OD_SUPERBLOCK_SIZE - 1)) &
    ~(OD_SUPERBLOCK_SIZE - 1);
   int frame_height = (di.pic_height + (OD_SUPERBLOCK_SIZE - 1)) &
    ~(OD_SUPERBLOCK_SIZE - 1);
-  int nhmbs = frame_width >> 4;
-  int nvmbs = frame_height >> 4;
-  j.nhmvbs = frame_width >> OD_LOG_MVBSIZE_MIN;
-  j.nvmvbs = frame_height >> OD_LOG_MVBSIZE_MIN;
-  j.mv_grid = (od_mv_grid_pt*)malloc(sizeof(od_mv_grid_pt)*(j.nhmvbs+1)*(j.nvmvbs+1));
-  j.mv_stride = j.nhmvbs+1;
-  int ret = daala_decode_ctl(dctx, OD_DECCTL_SET_MV_BUFFER, j.mv_grid, sizeof(od_mv_grid_pt)*(j.nhmvbs+1)*(j.nvmvbs+1));
-  if (ret) {
-    if (ret == OD_EINVAL) {
-      printf("Allocated the wrong MV buffer size.\n");
-    }
-    printf("Daala build doesn't support MV buffer reads!\n");
-    return -1;
-  }
-  mc_img.nplanes = di.nplanes;
-  mc_img.width = frame_width;
-  mc_img.height = frame_height;
-  int pli;
-  for (pli = 0; pli < mc_img.nplanes; pli++) {
-    int plane_buf_width = (frame_width) >> di.plane_info[pli].xdec;
-    int plane_buf_height = (frame_height) >> di.plane_info[pli].ydec;
-    od_img_plane* iplane = mc_img.planes + pli;
-    iplane->data = malloc(plane_buf_width * plane_buf_height);
-    iplane->xdec = di.plane_info[pli].xdec;
-    iplane->ydec = di.plane_info[pli].ydec;
-    iplane->xstride = 1;
-    iplane->ystride = plane_buf_width;
-  }
-  daala_decode_ctl(dctx, OD_DECCTL_SET_MC_IMG, &mc_img, sizeof(od_img));
+   
+  j = jiro_context_create(di);
+  jiro_context_setup(j, dctx);
+
+
+
   /* create a new window, and set its title */
-  builder = gtk_builder_new();
-  gtk_builder_add_from_file(builder, "jirojiro.ui", NULL);
+  builder =  gtk_builder_new_from_file("jirojiro.ui");
+  gtk_builder_connect_signals(builder, NULL);
   
   window = gtk_builder_get_object(builder, "window");
   gtk_window_set_title (GTK_WINDOW (window), "JiroJiro - Daala Visualization Tool");
@@ -255,6 +299,11 @@ main (int   argc,
   coordinates = GTK_WIDGET(gtk_builder_get_object(builder, "coordinates"));
   
   flags_label = GTK_WIDGET(gtk_builder_get_object(builder, "flags"));
+  
+  frame_mc = GTK_WIDGET(gtk_builder_get_object(builder, "frame_mc"));
+  frame_final = GTK_WIDGET(gtk_builder_get_object(builder, "frame_final"));
+  g_signal_connect (frame_mc, "toggled", G_CALLBACK(frame_toggle_cb), NULL);
+  g_signal_connect (frame_final, "toggled", G_CALLBACK(frame_toggle_cb), NULL);
 
     /* Signals used to handle the backing surface */
   g_signal_connect (da, "draw",
@@ -262,7 +311,7 @@ main (int   argc,
   g_signal_connect (window, "key_press_event", G_CALLBACK (key_press_cb), NULL);
   g_signal_connect (da, "motion-notify-event", G_CALLBACK(pointer_motion_cb), NULL);
   
-  gtk_widget_show(window);
+  gtk_widget_show(GTK_WIDGET(window));
 
   gtk_main ();
 

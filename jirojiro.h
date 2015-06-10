@@ -1,6 +1,6 @@
 #ifndef JIROJIRO_H
 #define JIROJIRO_H
-
+#include <daala/codec.h>
 #include "internal.h"
 
 typedef struct {
@@ -14,6 +14,9 @@ typedef struct {
   int mv_stride;
   unsigned int *flags;
   int fstride;
+  od_img img;
+  od_img mc_img;
+  int valid;
 } jiro_ctx;
 
 #endif
