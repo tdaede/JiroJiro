@@ -197,7 +197,12 @@ void prev_frame() {
 }
 
 static gboolean key_press_cb (GtkWidget *widget, GdkEventKey *event, gpointer user_data) {
-  next_frame();
+  if (event->keyval == GDK_KEY_period) {
+    next_frame();
+  }
+  if (event->keyval == GDK_KEY_comma) {
+    prev_frame();
+  }
   while (gtk_events_pending()) {
     gtk_main_iteration_do(FALSE);
   }
