@@ -1,3 +1,4 @@
+ACLOCAL_AMFLAGS = -I m4
 AM_CFLAGS = -Wall -Werror
 bin_PROGRAMS = jirojiro jirovideo
 jirojiro_SOURCES = jirojiro.c draw.c
