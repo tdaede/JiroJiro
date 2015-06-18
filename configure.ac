@@ -1,14 +1,16 @@
 #This line defines how what name will have output tarball
 AC_INIT([jirojiro],[0.0])
 #this line defines what compilation flags will be used
+AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE
+LT_INIT
 # DEFINE YOUR OWN HEADERS CHECK - DO NOT DELETE THIS LINE
 #this line defines what libraries should be used during building
 AC_CHECK_LIB([pthread],[pthread_create])
 AC_CHECK_LIB([pthread],[pthread_join])
 PKG_CHECK_MODULES(GTK, gtk+-3.0 >= 3.6)
 PKG_CHECK_MODULES([OGG], [ogg >= 1.3])
-PKG_CHECK_MODULES([DAALA], [daala >= 0.0])
+PKG_CHECK_MODULES([DAALA], [daaladec >= 0.0])
 # DEFINE YOUR OWN LIBRARY CHECK - DO NOT DELETE THIS LINE
 AC_PROG_CC
 #This line defines where are stored Makefiles for project and sources
