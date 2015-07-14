@@ -43,6 +43,25 @@ jiro_ctx *jlist[100];
   
 int frame_to_display = 0;
 
+void img_clone(od_img* img, od_img* input) {
+  od_img_plane *iplane;
+  od_img_plane *inputplane;
+  int pli;
+  img->nplanes = input->nplanes;
+  img->width = input->width;
+  img->height = input->height;
+  for (pli = 0; pli < img->nplanes; pli++) {
+    iplane = img->planes + pli;
+    inputplane = input->planes + pli;
+    iplane->data = (unsigned char *)malloc(inputplane->ystride*img->height);
+    iplane->xdec = inputplane->xdec;
+    iplane->ydec = inputplane->ydec;
+    iplane->xstride = inputplane->xstride;
+    iplane->ystride = inputplane->ystride;
+    memcpy(iplane->data, inputplane->data, inputplane->ystride*img->height);
+  }
+}
+
 static gboolean
 draw_cb (GtkWidget *widget,
          cairo_t   *cr,
@@ -167,16 +186,18 @@ int read_packet(ogg_packet *packet) {
 
 int jump_to_frame(int framenum) {
   ogg_packet packet;
+  od_img decoded_image;
   j = jlist[framenum];
   if (j == NULL) {
     j = jiro_context_create(di);
     jlist[framenum] = j;
     jiro_context_setup(j, dctx);
     if (read_packet(&packet)) {
-      if (daala_decode_packet_in(dctx, &j->img, &packet) != 0) {
+      if (daala_decode_packet_in(dctx, &decoded_image, &packet) != 0) {
         printf("Daala decode fail!\n");
         return -1;
       }
+      img_clone(&j->img, &decoded_image);
       j->valid = 1;
     }
   }
@@ -330,6 +351,7 @@ main (int   argc,
   
   frame_mc = GTK_WIDGET(gtk_builder_get_object(builder, "frame_mc"));
   frame_final = GTK_WIDGET(gtk_builder_get_object(builder, "frame_final"));
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(frame_final), TRUE);
   g_signal_connect (frame_mc, "toggled", G_CALLBACK(frame_toggle_cb), NULL);
   g_signal_connect (frame_final, "toggled", G_CALLBACK(frame_toggle_cb), NULL);
 
