@@ -3,6 +3,16 @@
 #include <daala/codec.h>
 #include "internal.h"
 
+
+typedef struct {
+  short plane;
+  short x;
+  short y;
+  short level;
+  short id;
+  short bits_q3;
+} od_acct_symbol;
+
 typedef struct {
   unsigned char *bsize;
   int bstride;
@@ -17,6 +27,8 @@ typedef struct {
   od_img img;
   od_img mc_img;
   int valid;
+  od_acct_symbol* syms;
+  int num_syms;
 } jiro_ctx;
 
 #endif

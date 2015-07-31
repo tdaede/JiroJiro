@@ -115,3 +115,14 @@ void draw_mvs(cairo_t *cr, jiro_ctx *j) {
     }
   }
 }
+
+void draw_accounting(cairo_t *cr, jiro_ctx *j, short id) {
+  for (int i = 0; i < j->num_syms; i++) {
+    if (j->syms[i].id != id) continue;
+    int size = 1<<(j->syms[i].level+2);
+    int area = size*size;
+    cairo_set_source_rgba(cr, 0, 1, 0, j->syms[i].bits_q3 * 1.0 / area);
+    cairo_rectangle(cr, j->syms[i].x*4, j->syms[i].y*4, size, size);
+    cairo_fill(cr);
+  }
+}

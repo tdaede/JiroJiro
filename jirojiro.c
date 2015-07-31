@@ -31,7 +31,7 @@ daala_comment dc;
 daala_setup_info *dsi;
 daala_dec_ctx *dctx;
 
-double scale_factor = 1.0;
+double scale_factor = 0.5;
 
 FILE* input;
 
@@ -42,6 +42,30 @@ jiro_ctx *jlist[100];
   GtkWidget *da;
   
 int frame_to_display = 0;
+
+int decoder_supports_accounting = 1;
+
+#define MAX_SYMBOL_TYPES (1000)
+
+#define OD_ACCT_FRAME (10)
+#define OD_ACCT_MV (11)
+
+typedef struct {
+  char *(str[MAX_SYMBOL_TYPES]);
+  int nb_str;
+} od_accounting_dict;
+
+typedef struct {
+  od_acct_symbol *syms;
+  int nb_syms_alloc;
+  int nb_syms;
+  od_accounting_dict dict;
+  int curr_x;
+  int curr_y;
+  int curr_level;
+  int curr_plane;
+  uint32_t last_tell;
+} od_accounting;
 
 void img_clone(od_img* img, od_img* input) {
   od_img_plane *iplane;
@@ -84,7 +108,7 @@ draw_cb (GtkWidget *widget,
     int nvsb = (di.pic_height + (OD_BSIZE_MAX - 1) & ~(OD_BSIZE_MAX - 1)) >> OD_LOG_BSIZE0 + OD_NBSIZES - 1;
     int sbx;
     int sby;
-    
+    /*
     for (sby = 0; sby < nvsb; sby++) {
       for (sbx = 0; sbx < nhsb; sbx++) {
         draw_block_recursive(cr, j, sbx*8, sby*8, 3);
@@ -92,6 +116,8 @@ draw_cb (GtkWidget *widget,
     }
     
     draw_mvs(cr, j);
+    */
+    draw_accounting(cr, j, 10);
   }
   
   return FALSE;
@@ -193,9 +219,17 @@ int jump_to_frame(int framenum) {
     jlist[framenum] = j;
     jiro_context_setup(j, dctx);
     if (read_packet(&packet)) {
+      od_accounting* a;
+      decoder_supports_accounting = daala_decode_ctl(dctx, OD_DECCTL_GET_ACCOUNTING, &a, sizeof(od_accounting*)) == 0;
       if (daala_decode_packet_in(dctx, &decoded_image, &packet) != 0) {
         printf("Daala decode fail!\n");
         return -1;
+      }
+      if (decoder_supports_accounting) {
+        j->num_syms = a->nb_syms;
+        printf("%i bytes of accounting data allocated\n", j->num_syms*sizeof(*j->syms));
+        j->syms = malloc(j->num_syms*sizeof(*j->syms));
+        memcpy(j->syms, a->syms, j->num_syms*sizeof(*j->syms));
       }
       img_clone(&j->img, &decoded_image);
       j->valid = 1;
